@@ -484,60 +484,66 @@ HELP_TEXT = """
 [bold]Commands[/bold]
 
 [cyan]open[/cyan] <file.pdf>
-    Open a PDF. Offset resets to 0.
+    Open a PDF. Loads saved offset for this file (from prefs). 
 
 [cyan]save[/cyan]
-    Save to current file. Outlines rebuilt cleanly (no duplicates).
+    Save to the current file. Outlines rebuilt cleanly (no duplicates).
 
 [cyan]saveas[/cyan] <file.pdf>
-    Save to a new file and switch context.
+    Save to a new file and switch context (offset entry is kept for that file).
+
+[cyan]close[/cyan]
+    Close the current PDF and reset state. Prompts if there are unsaved changes.
+
+[cyan]quit[/cyan] / [cyan]exit[/cyan]
+    Exit the shell. Prompts if there are unsaved changes.
 
 [cyan]list[/cyan] [--paths]
     Show outline tree with ids. Pages display as p. logical/[dim]actual[/dim].
-    With --paths, show per-level indices [#k] to build paths by eye.
+    With --paths, show per-level indices [#k] so you can build paths (1-based).
 
-[cyan]add[/cyan] "<title>" <page> [--parent <id|path>] [--index <n>]
-    Add an outline at logical page under optional parent, inserted at index (0-based).
+[cyan]add[/cyan] "<title>" <page> [--parent/-p <id|path|0|root|/>] [--index/-i <n>]
+    Add an outline at logical page. 
+    • If --parent is omitted, insert at root.
+    • --index is 0-based within the destination’s children; 0 puts it first.
 
-[cyan]grp[/cyan] "<name>" [--parent <id|path>] [--index <n>]
-    Add a group (folder) under optional parent, inserted at index (0-based).
+[cyan]grp[/cyan] "<name>" [--parent/-p <id|path|0|root|/>] [--index/-i <n>]
+    Add a group (folder) with no page.
+    Same parent/index rules as [cyan]add[/cyan].
 
 [cyan]remove[/cyan] <id|path>
-    Remove a node by id (e.g., n3) or by path (e.g., 1>2>1).
-    
-[cyan]remove[/cyan] --all
-    Remove ALL outlines. Asks for confirmation.
+    Remove a single node by id (e.g., n3) or path (e.g., 1>2>1).
 
-[cyan]move[/cyan] <id|path> [--to <parent_id|path>] [--index <n>]
+[cyan]remove[/cyan] --all
+    Remove ALL outlines (asks for confirmation).
+
+[cyan]rename[/cyan] <id|path> "<new title>"
+    Rename a node without changing page or position.
+
+[cyan]move[/cyan] <id|path> [--to/-t <id|path|0|root|/>] [--index/-i <n>]
     Move a node under a new parent (or root if --to omitted).
-    Index is 0-based within the destination's children.
-    Examples:
-      move 2
-      move 1>3 --to n5 --index 0
-      move n9 --to 3>2
+    • --index is 0-based insert position within the destination.
+    • Safe against moving into your own subtree.
 
 [cyan]setpage[/cyan] <id|path> <page>
     Set logical page for a node and make it a leaf.
 
 [cyan]clearpage[/cyan] <id|path>
-    Remove page from a node (turns into a group).
+    Remove page from a node (turns it into a group).
 
-[cyan]offset[/cyan] set <n>
 [cyan]offset[/cyan] <n>
+[cyan]offset[/cyan] set <n>
 [cyan]offset[/cyan] clear
     Global shift applied to all outlines. Actual = logical + offset.
+    Offset is saved per-file and restored on open.
 
-[cyan]close[/cyan]
-    Close the current PDF (asks to discard if unsaved).
+[bold]Paths[/bold]
+    A path is a '>'-separated set of 1-based indices that locates a node by position.
+    Example: 1>3>2 = first top-level → its third child → that node’s second child.
+    Use paths anywhere an id (n#) is accepted.
 
-[cyan]quit[/cyan] / [cyan]exit[/cyan]
-    Exit the shell (asks to discard if unsaved).
-
-[cyan]rename[/cyan] <id|path> "<new title>"
-    Rename a node without changing its page or position.
-
-[cyan]help[/cyan]
-    Show this help.
+[bold]Root aliases[/bold]
+    Wherever a parent is expected, you can use [cyan]0[/cyan], [cyan]root[/cyan], or [cyan]/[/cyan] to mean the root.
 """
 
 
@@ -671,48 +677,73 @@ def main():
 
                 i = 2
                 while i < len(args):
-                    if args[i] == "--parent" or "-p":
+                    tok = args[i]
+                    if tok in ("--index", "-i"):
+                        i += 1
+                        if i >= len(args):
+                            raise ValueError("--index needs an integer")
+                        index = int(args[i])  # 0-based, 0 is valid
+                    elif tok in ("--parent", "-p"):
                         i += 1
                         if i >= len(args):
                             raise ValueError("--parent needs a value")
-                        parent = model._get_ref(args[i])
-                    elif args[i] == "--index" or "-i":
-                        i += 1
-                        if i >= len(args) or not args[i].lstrip("-").isdigit():
-                            raise ValueError("--index needs an integer")
-                        index = int(args[i])
+                        ptok = args[i]
+                        if ptok in ("0", "root", "/"):
+                            parent = None                       # root
+                        else:
+                            # id or path like 1>2
+                            parent = model._get_ref(ptok)
                     else:
-                        raise ValueError(f"Unknown option {args[i]}")
+                        raise ValueError(f"Unknown option {tok}")
                     i += 1
+
+                    target_list = parent.children if parent else model.root
+                    if index is None:
+                        index = len(target_list)
+                    if not (0 <= index <= len(target_list)):
+                        raise ValueError("Destination index out of range")
 
                 model.add_outline(title, page, parent=parent, index=index)
                 console.print(make_indented(f"[green]Added[/green]"))
                 console.print()
 
             elif cmd == "grp":
-                # grp "<name>" [--parent <id|path>] [--index <n>]
+                # grp "<name>" [--parent/-p <id|path|0|root|/>] [--index/-i <n>]
+
                 if len(args) < 1:
                     raise ValueError(
-                        'grp "<name>" [--parent <id|path>] [--index <n>]')
+                        'grp "<name>" [--parent/-p <id|path|0|root|/>] [--index/-i <n>]')
+
                 name = args[0]
                 parent = None
                 index = None
 
                 i = 1
                 while i < len(args):
-                    if args[i] == "--parent":
+                    tok = args[i]
+                    if tok in ("--index", "-i"):
+                        i += 1
+                        if i >= len(args):
+                            raise ValueError("--index needs an integer")
+                        index = int(args[i])
+                    elif tok in ("--parent", "-p"):
                         i += 1
                         if i >= len(args):
                             raise ValueError("--parent needs a value")
-                        parent = model._get_ref(args[i])
-                    elif args[i] == "--index":
-                        i += 1
-                        if i >= len(args) or not args[i].lstrip("-").isdigit():
-                            raise ValueError("--index needs an integer")
-                        index = int(args[i])
+                        ptok = args[i]
+                        if ptok in ("0", "root", "/"):
+                            parent = None
+                        else:
+                            parent = model._get_ref(ptok)
                     else:
-                        raise ValueError(f"Unknown option {args[i]}")
+                        raise ValueError(f"Unknown option {tok}")
                     i += 1
+
+                target_list = parent.children if parent else model.root
+                if index is None:
+                    index = len(target_list)
+                if not (0 <= index <= len(target_list)):
+                    raise ValueError("Destination index out of range")
 
                 model.add_group(name, parent=parent, index=index)
                 console.print(make_indented(
@@ -742,6 +773,8 @@ def main():
                     raise ValueError("remove <id|path>  |  remove --all")
 
             elif cmd == "move":
+                # move <id|path> [--to/-t <id|path|0|root|/>] [--index/-i <n>]
+
                 if not args:
                     raise ValueError(
                         "move <id|path> [--to <parent_id|path>] [--index <n>]")
@@ -750,14 +783,23 @@ def main():
                 index = None
                 i = 1
                 while i < len(args):
-                    if args[i] == "--to":
+                    a = args[i]
+                    if a in ("--to", "-t"):
                         i += 1
-                        to = args[i]
-                    elif args[i] == "--index":
+                        if i >= len(args):
+                            raise ValueError("--to needs a value")
+                        ttok = args[i]
+                        if ttok in ("0", "root", "/"):
+                            to = None                         # root
+                        else:
+                            to = model._get_ref(ttok)         # id or path
+                    elif a in ("--index", "-i"):
                         i += 1
-                        index = int(args[i])
+                        if i >= len(args):
+                            raise ValueError("--index needs an integer")
+                        index = int(args[i])                  # 0-based
                     else:
-                        raise ValueError(f"Unknown option {args[i]}")
+                        raise ValueError(f"Unknown option {a}")
                     i += 1
                 model.move(tok, to, index)
                 console.print(make_indented("[green]Moved[/green]"))
