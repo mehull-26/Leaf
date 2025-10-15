@@ -22,7 +22,7 @@ A **GUI** built on Qt6 exists but is minimal and experimental.
 
 ---
 
-## 3 · Command Reference
+## 3 · [Command Reference](cmd_reference.md)
 
 | Command | Description |
 |----------|-------------|
@@ -42,7 +42,7 @@ A **GUI** built on Qt6 exists but is minimal and experimental.
 
 ---
 
-## 4 · Paths and Indexing
+## 4 · [Paths and Indexing](paths.md)
 
 - **Paths** use `>` to navigate levels, e.g., `1>3>2`.  
 - **Index (`--index`)** is **0-based** — use `0` for the first slot.  
@@ -54,7 +54,7 @@ add "Introduction" 1 -i 0
 add "Methods" 4 -p 1 -i 1
 move n3 -t 0 -i 0
 ```
-## 5. Offsets
+## 5. [Offsets](offset.md)
 
 Leaf stores offsets per file in a small JSON file:
 ```
@@ -77,7 +77,7 @@ offset set 2
 save
 ```
 
-## 7. Output Format
+## 7. [Listing Tree](list.md)
 
 When listing outlines:
 ```

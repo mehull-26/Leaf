@@ -33,3 +33,5 @@ pyinstaller --onefile scripts/gui.py -n leaf-gui
 ```
 
 Add the dist/ folder to your PATH for global use.
+
+Read the documentation at [Documentation](docs/intro.md)
