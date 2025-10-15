@@ -2,8 +2,10 @@
 
 **Leaf** is a lightweight CLI + GUI tool for editing PDF outlines (bookmarks).  
 It lets you add, remove, rename, move, and group bookmarks with precision — all from a neat shell interface.  
-The GUI exists and works, but is minimal and **not recommended yet**.  
-The **CLI** is full-blown and rock-solid.
+The GUI exists and works, but it is minimal and **not yet recommended**.  
+The CLI is full-featured and rock-solid.
+
+>**Motivation:** While reading books in PDF format, I often encounter PDFs that lack outlines, making it difficult to navigate to the desired section. I tried using online tools, but they required subscriptions for files with many pages or a large size. Hence, I developed this tool, which helps me quickly add outlines to chapters or content in a paper or book. 
 
 ---
 
